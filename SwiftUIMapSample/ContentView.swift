@@ -67,8 +67,8 @@ struct ContentView: View {
 
 final class LocalSearchService: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
     @Published var searchQuery = ""
-    @Published var suggestions: [MKLocalSearchCompletion] = []
-    @Published var results: [MKMapItem] = []
+    @Published private(set) var suggestions: [MKLocalSearchCompletion] = []
+    @Published private(set) var results: [MKMapItem] = []
     @Published var boundingRegion: MKCoordinateRegion = MKCoordinateRegion(.world)
 
     private let completer: MKLocalSearchCompleter = .init()
