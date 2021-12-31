@@ -12,21 +12,35 @@ import Combine
 struct ContentView: View {
 
     @StateObject private var service: LocalSearchService = .init()
+    @State private var error: Error?
 
     var body: some View {
         NavigationView {
+            VStack {
+                if let error = error?.localizedDescription {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
 
-            Map(coordinateRegion: $service.boundingRegion, annotationItems: service.results) { item in
-                MapMarker(coordinate: item.placemark.coordinate, tint: Color.pink)
+                Map(coordinateRegion: $service.boundingRegion, annotationItems: service.results) { item in
+                    MapMarker(coordinate: item.placemark.coordinate, tint: Color.pink)
+                }
+                .edgesIgnoringSafeArea([.horizontal, .bottom])
             }
-            .edgesIgnoringSafeArea([.horizontal, .bottom])
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
         }
         .searchable(text: $service.searchQuery) {
             ForEach(service.suggestions) { suggestion in
                 Button {
-                    Task { await service.searchBySuggestion(suggestion) }
+                    Task {
+                        do {
+                            try await service.searchBySuggestion(suggestion)
+                        } catch {
+                            self.error = error
+                        }
+                    }
                 } label: {
                     VStack(alignment: .leading) {
                         Text(suggestion.title)
@@ -40,7 +54,13 @@ struct ContentView: View {
             }
         }
         .onSubmit(of: .search) {
-            Task { await service.searchByQuery() }
+            Task {
+                do {
+                    try await service.searchByQuery()
+                } catch {
+                    self.error = error
+                }
+            }
         }
     }
 }
@@ -60,29 +80,25 @@ final class LocalSearchService: NSObject, ObservableObject, MKLocalSearchComplet
         completer.delegate = self
     }
 
-    func searchBySuggestion(_ suggestion: MKLocalSearchCompletion) async {
+    func searchBySuggestion(_ suggestion: MKLocalSearchCompletion) async throws {
         let request: MKLocalSearch.Request = .init(completion: suggestion)
-        await search(using: request)
+        try await search(using: request)
     }
 
-    func searchByQuery() async {
+    func searchByQuery() async throws {
         let request: MKLocalSearch.Request = .init()
         request.naturalLanguageQuery = searchQuery
-        await search(using: request)
+        try await search(using: request)
     }
 
-    private func search(using request: MKLocalSearch.Request) async {
+    private func search(using request: MKLocalSearch.Request) async throws {
         let localSearch: MKLocalSearch = .init(request: request)
-        do {
-            let response = try await localSearch.start()
-            results = response.mapItems
-            if let location = response.mapItems.first?.placemark {
-                boundingRegion = MKCoordinateRegion(center: location.coordinate,
-                                                    latitudinalMeters: 12_00,
-                                                    longitudinalMeters: 12_00)
-            }
-        } catch {
-            print(error)
+        let response = try await localSearch.start()
+        results = response.mapItems
+        if let location = response.mapItems.first?.placemark {
+            boundingRegion = MKCoordinateRegion(center: location.coordinate,
+                                                latitudinalMeters: 12_00,
+                                                longitudinalMeters: 12_00)
         }
     }
 
